@@ -14,7 +14,7 @@
 -(instancetype)initWithFrame:(CGRect)frame withPage:(NSInteger)page;
 
 //滚动结束的回调
--(void)didEndScroll:(void(^)(NSInteger position))block;
+-(void)didEndScroll:(void(^)(int position))block;
 
 //关联滑动（scrollView滚动的位置）
 -(void)didScroll:(void(^)(CGFloat scrollContentX))handel;

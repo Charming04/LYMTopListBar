@@ -17,10 +17,10 @@
     NSMutableArray  *mb_items;
     int             mb_position;
     void(^mb_itemDidClicked)(int position);
-    BOOL            mb_flag;//swithToNewPositonHandel控制这个方法每次只调用一次即可
 }
 
 #pragma mark - //////////初始化方法/////////////
+#pragma mark 1.默认初始化方法
 -(instancetype)initWithFrame:(CGRect)frame{
     if (self = [super initWithFrame:frame]) {
         
@@ -40,11 +40,16 @@
     }
     return self;
 }
+#pragma mark 2.通过itemTitle初始化
 -(instancetype)initWithFrame:(CGRect)frame itemTitle:(NSArray *)itemsTitles{
-    
+    return [self initWithFrame:frame itemTitle:itemsTitles relScrollView:nil];
+}
+
+-(instancetype)initWithFrame:(CGRect)frame itemTitle:(NSArray *)itemsTitles relScrollView:(UIScrollView *)scrollView{
     if (self = [self initWithFrame:frame]) {
         //1.初始化
         mb_itemTitles = [[NSMutableArray alloc]initWithArray:itemsTitles]; //titles
+        mb_relativeScrollView = scrollView;
         
         //2.topbar
         _mb_topScrollView = [[UIScrollView alloc]initWithFrame:self.bounds];
@@ -54,14 +59,19 @@
         _mb_topScrollView.scrollsToTop = NO;
         [self addSubview:_mb_topScrollView];
         
-        //3.item,indicator
-        CGFloat contentWidth = [self ceateItemsAndIndicator:itemsTitles];
+        //3.item
+        CGFloat contentWidth = [self ceateItems:itemsTitles];
         if (contentWidth < _mb_topBarWidth) {
             contentWidth = _mb_topBarWidth;
         }
         _mb_topScrollView.contentSize = CGSizeMake(contentWidth, _mb_topBarHeight);
         
-        //4.bottomLine、topLine
+        //4.indicator
+        [self createIndicatorAtPosition:0];
+        mb_selectBtn = mb_items[0];
+        mb_selectBtn.selected = YES;
+        
+        //5.bottomLine、topLine
         CGFloat tempSide = 1/[UIScreen mainScreen].scale;//获取该设备下最新的线的边长
         UIView *bottomLineV = [[UIView alloc]initWithFrame:CGRectMake(0, CGRectGetMaxY(_mb_topScrollView.frame) - tempSide, self.frame.size.width, tempSide)];
         bottomLineV.backgroundColor = RGB(178, 178, 178);
@@ -78,7 +88,21 @@
     return self;
 }
 
-#pragma mark - ///////修改选中items中btn的选中颜色/////////
+
+#pragma mark - //////////计算字符串的宽////////////
+-(CGRect)calculateSizeWithFont:(NSInteger)Font Text:(NSString *)Text{
+    NSDictionary *attr = @{NSFontAttributeName : [UIFont systemFontOfSize:Font]};
+    CGRect size = [Text boundingRectWithSize:CGSizeMake(MAXFLOAT, self.frame.size.height)
+                                     options:NSStringDrawingUsesFontLeading|NSStringDrawingUsesLineFragmentOrigin
+                                  attributes:attr
+                                     context:nil];
+    return size;
+}
+
+
+
+#pragma mark - ///////修改成员属性的值/////////
+#pragma mark 1.修改选中items中btn的选中颜色
 -(void)setMb_itemSelectColor:(UIColor *)mb_itemSelectColor{
     _mb_itemSelectColor = mb_itemSelectColor;
     
@@ -87,8 +111,7 @@
         [((UIButton *)mb_items[i]) setTitleColor:mb_itemSelectColor forState:UIControlStateSelected];
     }
 }
-
-#pragma mark - ///////修改items中btn的默认颜色
+#pragma mark 2.修改items中btn的默认颜色
 -(void)setMb_itemNomarlColor:(UIColor *)mb_itemNomarlColor{
     _mb_itemNomarlColor = mb_itemNomarlColor;
     
@@ -97,8 +120,7 @@
         [((UIButton *)mb_items[i]) setTitleColor:mb_itemNomarlColor forState:UIControlStateNormal];
     }
 }
-
-#pragma mark - ///////修改indicator的颜色
+#pragma mark 3.修改indicator的颜色
 -(void)setMb_indicatorColor:(UIColor *)mb_indicatorColor{
     _mb_indicatorColor = mb_indicatorColor;
     
@@ -106,10 +128,14 @@
     [_mb_indicatorView setBackgroundColor:mb_indicatorColor];
 }
 
-#pragma mark - //////创建item (title, index)////////
--(CGFloat)ceateItemsAndIndicator:(NSArray *)itemTitles{
+
+
+
+#pragma mark - //////创建基础控件////////
+#pragma mark 1.创建item (title, index)
+-(CGFloat)ceateItems:(NSArray *)itemTitles{
     
-    //1.item
+    //item
     CGFloat itemsWidth = 0;
     for (int i = 0; i < itemTitles.count; i++) {
         CGFloat titleW = [self calculateSizeWithFont:_mb_itemFontSize Text:itemTitles[i]].size.width;              //title的宽
@@ -128,7 +154,8 @@
         [mb_items addObject:item];
         [_mb_topScrollView addSubview:item];
     }
-    //1.1如果总宽度不够屏幕的宽度
+    
+    //如果总宽度不够屏幕的宽度
     CGFloat allAddWidth = 0;
     if(itemsWidth < _mb_topBarWidth){//重新布局
         //1.少的长度
@@ -143,33 +170,82 @@
             allAddWidth += addWidth;
         }
     }
-    
+
+    return itemsWidth;
+}
+#pragma mark 创建indicator,并设置其位置
+-(void)createIndicatorAtPosition:(NSInteger)position{
     //2.indicator
     if (_mb_indicatorView == nil) {
         _mb_indicatorView = [[UIView alloc]init];
         _mb_indicatorView.layer.cornerRadius = 5;
         _mb_indicatorView.backgroundColor = _mb_indicatorColor;
         [_mb_topScrollView addSubview:_mb_indicatorView];
-        
-        [self caluIndicatorPosition:0];
     }
-    
-    //3.默认选中第一个item
-    mb_selectBtn = mb_items[0];
-    mb_selectBtn.selected = YES;
-
-    return itemsWidth;
+    [self adjustIndicatorPosition:position];
 }
 
 
-#pragma mark - //////////计算indicator的位置////////
--(void)caluIndicatorPosition:(NSInteger)index{
+#pragma mark - ///////////item事件///////////
+#pragma mark item的点击事件
+-(void)itemClick:(UIButton *)sender{
+    if (sender.tag == mb_selectBtn.tag) {
+        return;//如果是当前的btn则返回
+    }
+    
+    //选中新item
+    if(mb_relativeScrollView && mb_itemDidClicked){
+        mb_position = (int)sender.tag;
+        mb_itemDidClicked(mb_position);
+    }else{
+        [self selectItem:(int)sender.tag];
+    }
+}
+#pragma mark item的回调事件
+-(void)itemDidClicked:(void (^)(int))callback{
+    if (callback) {
+        mb_itemDidClicked = [callback copy];
+    }
+}
+
+#pragma mark - 选中某个item的处理
+-(BOOL)selectItem:(int)index{
+    if (index < 0 || index >= mb_items.count) {
+        return NO;//index设置不对
+    }
+    //1.修改item的状态
+    mb_selectBtn.selected = NO;
+    mb_selectBtn = mb_items[index];
+    mb_selectBtn.selected = YES;
+    
+    //2.调节indicator的位置
+    [self adjustIndicatorPosition:index];
+    
+    //3.调节topScrollView的位置
+    [self adjustTopScrollPosition:index];
+    
+    //4.修改mb_position
+    if (index == mb_position) {
+        return NO;
+    }else{
+        mb_position = index;
+        return YES;
+    }
+}
+
+#pragma mark - 获取当期的位置
+-(NSInteger)getCurrentPosition{
+    return mb_position;
+}
+
+#pragma mark 调整indicator的位置
+-(void)adjustIndicatorPosition:(NSInteger)index{
     UIButton *tmpBtn = mb_items[index];
     CGFloat btnW = tmpBtn.frame.size.width;
     CGFloat btnX = tmpBtn.frame.origin.x;
     CGFloat titleW = [mb_itemTitleWidths[index]floatValue];
     CGFloat padX = 0.5 * (btnW - titleW) + btnX - _mb_itemDistance/ 4;
-
+    
     NSTimeInterval duration = 0.2;
     if (index == mb_position) {
         duration = 0;
@@ -180,52 +256,7 @@
     }];
 }
 
-
-#pragma mark - ///////////item点击事件///////////
--(void)itemClick:(UIButton *)sender{
-    if (sender.tag == mb_selectBtn.tag) {
-        return;
-    }
-    
-    [self swithToNewPositonHandel:sender];
-}
--(void)itemDidClicked:(void (^)(int))callback{
-    if (callback) {
-        mb_itemDidClicked = [callback copy];
-    }
-}
-
--(void)swithToNewPositonHandel:(UIButton *)sender{
-    
-    NSInteger tmpTag = sender.tag;
-    
-    if(mb_relativeScrollView == nil){
-        //1.改变btn的颜色
-        mb_selectBtn.selected = NO;
-        sender.selected = YES;
-        //2.该变indicator的frame
-        [self caluIndicatorPosition:tmpTag];
-        [self adjustTopScrollPosition:tmpTag];
-        mb_position = (int)tmpTag;
-    }
-    
-    mb_selectBtn = sender;
-    if (mb_itemDidClicked) {
-        mb_itemDidClicked((int)tmpTag);
-    }
-}
-
-#pragma mark - //////////计算字符串的宽////////////
--(CGRect)calculateSizeWithFont:(NSInteger)Font Text:(NSString *)Text{
-    NSDictionary *attr = @{NSFontAttributeName : [UIFont systemFontOfSize:Font]};
-    CGRect size = [Text boundingRectWithSize:CGSizeMake(MAXFLOAT, self.frame.size.height)
-                                     options:NSStringDrawingUsesFontLeading|NSStringDrawingUsesLineFragmentOrigin
-                                  attributes:attr
-                                     context:nil];
-    return size;
-}
-
-#pragma mark - 调整topbar的位置
+#pragma mark 调整topbar的位置
 -(void)adjustTopScrollPosition:(NSInteger)postion{
     
     if(postion == 0 && _mb_topScrollView.contentOffset.x == 0){
@@ -233,43 +264,17 @@
     }
     
     [UIView animateWithDuration:0.2 animations:^{
-        [self changeScrollViewPostion:postion];
+        UIButton *tmpBtn = mb_items[postion];
+        CGPoint changePoint;
+        if (tmpBtn.center.x >= _mb_topBarWidth * 0.5 && tmpBtn.center.x < _mb_topScrollView.contentSize.width- _mb_topBarWidth * 0.5) {
+            changePoint = CGPointMake(tmpBtn.center.x - _mb_topBarWidth * 0.5, 0);
+        }else if (tmpBtn.center.x >= _mb_topScrollView.contentSize.width - _mb_topBarWidth * 0.5){
+            changePoint = CGPointMake(_mb_topScrollView.contentSize.width-_mb_topBarWidth, 0);
+        }else{
+            changePoint = CGPointMake(0, 0);
+        }
+        _mb_topScrollView.contentOffset = changePoint;
     }];
-}
-
--(void)changeScrollViewPostion:(NSInteger)postion{
-    UIButton *tmpBtn = mb_items[postion];
-    CGPoint changePoint;
-    if (tmpBtn.center.x >= _mb_topBarWidth * 0.5 && tmpBtn.center.x < _mb_topScrollView.contentSize.width- _mb_topBarWidth * 0.5) {
-        changePoint = CGPointMake(tmpBtn.center.x - _mb_topBarWidth * 0.5, 0);
-    }else if (tmpBtn.center.x >= _mb_topScrollView.contentSize.width - _mb_topBarWidth * 0.5){
-        changePoint = CGPointMake(_mb_topScrollView.contentSize.width-_mb_topBarWidth, 0);
-    }else{
-        changePoint = CGPointMake(0, 0);
-    }
-    _mb_topScrollView.contentOffset = changePoint;
-}
-
-#pragma mark - //////选中某个item的处理//////
--(BOOL)selectItem:(NSInteger)index{
-    if (index < 0 || index >= mb_items.count) {
-        index = 0;
-    }
-    if (index >= 0 && index < mb_items.count && index != mb_selectBtn.tag) {
-        UIButton *sender = mb_items[index];
-        [self swithToNewPositonHandel:sender];
-    }else{//修正topbar的位置(带动画)
-        [self adjustTopScrollPosition:index];
-    }
-    if (index == mb_position) {
-        return NO;
-    }
-    return YES;
-}
-
-#pragma mark - 获取当期的位置
--(NSInteger)getCurrentPosition{
-    return mb_position;
 }
 
 #pragma mark - 关联滑动
@@ -341,7 +346,7 @@
         indicatorWidth = [mb_itemTitleWidths[position] floatValue] + 0.5 * _mb_itemDistance;
     }
     
-    //3.显示滑动条
+    //3.调整滑动条位置
     CGRect rect = _mb_indicatorView.frame;
     rect.size.width = indicatorWidth;
     _mb_indicatorView.frame = rect;

@@ -28,13 +28,13 @@
         mb_position = 0;
         self.scrollsToTop = NO;
         self.backgroundColor = [UIColor clearColor];
-        self.showsHorizontalScrollIndicator = NO;
+//        self.showsHorizontalScrollIndicator = NO;
     }
     return self;
 }
 
 #pragma mark - 滚动结束的回调
--(void)didEndScroll:(void (^)(NSInteger))block{
+-(void)didEndScroll:(void (^)(int))block{
     if (block) {
         mb_didEndScroll = [block copy];
     }

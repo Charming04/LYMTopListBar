@@ -29,11 +29,14 @@
 //传入item的title,构建topbar的数据源
 -(instancetype)initWithFrame:(CGRect)frame itemTitle:(NSArray *)itemsTitles;
 
+//构建关联滑动的topBar
+-(instancetype)initWithFrame:(CGRect)frame itemTitle:(NSArray *)itemsTitles relScrollView:(UIScrollView*)scrollView;
+
 //item选中后的回调事件
 -(void)itemDidClicked:(void(^)(int position))callback;
 
 //跳转到第N个item（从0开始）,如果位置不变，返回NO,位置改变返回YES
--(BOOL)selectItem:(NSInteger)index;
+-(BOOL)selectItem:(int)index;
 
 //获取当前的位置
 -(NSInteger)getCurrentPosition;
